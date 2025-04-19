@@ -12,7 +12,13 @@ available_symbols = brokerage_df["act_symbol"]
 prices_df = prices_df.filter(pl.col("act_symbol").is_in(available_symbols))
 income_df = income_df\
     .filter(pl.col("act_symbol").is_in(available_symbols))\
-    .filter(pl.col("period") == "Quarter")
+    .filter(pl.col("period") == "Quarter")\
+    .group_by("act_symbol")\
+    .map_groups(
+        lambda group: group.with_columns(
+            pl.col("sales").rolling_sum(window_size=4, min_samples=1).alias("trailing_4q_sales")
+        )
+)
 
 
 #Map dates
@@ -25,7 +31,7 @@ income_df = income_df.with_columns(
 
 #join prices with income statements
 result_df = prices_df.join_asof(
-    income_df.select(["act_symbol", "date", "average_shares", "sales", "period"]),
+    income_df.select(["act_symbol", "date", "average_shares", "trailing_4q_sales"]),
     left_on="date",
     right_on="date",
     by="act_symbol",
@@ -35,15 +41,17 @@ result_df = prices_df.join_asof(
 ])
 
 
-#add medians:
+#add medians and PS:
 result_df = result_df.group_by("act_symbol")\
     .map_groups(
         lambda group: group.sort('date')
             .with_columns([
             pl.col("market_cap").rolling_median(window_size=252 * 3, min_samples=1).alias("market_cap_3y_median"),
-            pl.col("market_cap").rolling_median(window_size=252 * 5, min_samples=1).alias("market_cap_5y_median")
-            ])
-)
+            pl.col("market_cap").rolling_median(window_size=252 * 5, min_samples=1).alias("market_cap_5y_median"),
+            (pl.col("market_cap") / pl.col("trailing_4q_sales")).alias("ps"),
+            #pl.col("ps").rolling_median(window_size=252 * 3, min_samples=1).alias("ps_3y_median"),
+            #pl.col("ps").rolling_median(window_size=252 * 5, min_samples=1).alias("ps_5y_median")
+        ]))
 
 def create_symbol_plots(symbol_df, symbol):
     dates = symbol_df["date"].to_list()
