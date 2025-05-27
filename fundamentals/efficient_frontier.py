@@ -13,7 +13,7 @@ mpl.rcParams['font.family'] = 'serif'
 conn = sqlite3.connect("../stock_prices.db")
 
 #Utils
-default_rank_mapping = { 'HOLD': 0, 'Sell': -1, 'Strong Sell': -3, 'Buy': 1, 'Strong Buy': 3}
+default_rank_mapping = { 'Hold': 0, 'Sell': -1, 'Strong Sell': -3, 'Buy': 1, 'Strong Buy': 3}
 
 def prepare_data(ticker, conn, rank_mapping=default_rank_mapping):
     stock_ranks = pd.read_sql(f'SELECT date, rank FROM {ticker}_ranks', conn)
