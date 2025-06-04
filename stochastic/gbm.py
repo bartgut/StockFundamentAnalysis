@@ -1,3 +1,4 @@
+from stochastic.gbm_func import brownian_motion
 from utils.load_stock import load_prices,load_ranks
 import backtrader as bt
 import sqlite3
@@ -15,8 +16,8 @@ stock_prices = load_prices("CRSP", conn)
 class GBMIndicator(bt.Indicator):
     lines = ('high_percentile', 'low_percentile', 'avg_price')
     params = (
-        ('high_percentile', 60), #80
-        ('low_percentile', 30), #20
+        ('high_percentile', 80), #80
+        ('low_percentile', 20), #20
         ('rolling_window_size', 30),
         ('simulation_paths', 500),
         ('prediction_horizon', 1/12)
@@ -30,17 +31,12 @@ class GBMIndicator(bt.Indicator):
 
     def next(self):
         rolling_window_data = pd.Series(self.data.close.get(size=self.params.rolling_window_size))
-        pct_changes = rolling_window_data.pct_change().dropna()
-        current_price = rolling_window_data.iloc[-1]
-        mean = pct_changes.mean() * 252
-        std = pct_changes.std() * np.sqrt(252)
-
-        dW = np.random.normal(0, np.sqrt(self.dt), (self.params.simulation_paths, self.N))
-        drift = (mean - 0.5 * std ** 2) * self.dt
-        diffusion = std * dW
-        S = current_price * np.exp(np.cumsum(drift + diffusion, axis=1))
-
-        final_prices = S[:, -1]
+        simulation = brownian_motion(rolling_window_data,
+                        self.params.simulation_paths,
+                        self.N,
+                        self.dt,
+                        self.params.rolling_window_size)
+        final_prices = simulation[:, -1]
         percentiles = np.percentile(final_prices, [self.params.low_percentile, self.params.high_percentile])
         p_low = percentiles[0]
         p_high = percentiles[1]
@@ -53,6 +49,7 @@ class GBMStrategy(bt.Strategy):
 
     def __init__(self):
         self.gbm = GBMIndicator()
+        self.rsi = bt.talib.RSI(self.data, timeperiod=14)
 
     def next(self):
         if not self.position:
